@@ -1,0 +1,384 @@
+library(readr)
+library(stringr)
+data_location <- c("C:/Users/보안내용/Desktop/R tool Macro/Klarf")
+data_names <- list.files(data_location)
+regression_location_num <- grep(".001", data_names)
+regression_location <- data_names[regression_location_num]
+
+result_data <- matrix(0,length(regression_location), 7)
+colnames(result_data) <- c("Lot-ID","Wafer-ID", "ResultTimestamp", "Machine-ID", "Step-ID", "Setup-ID", "Device-ID")
+
+show(Klarf_scenario)### Klarf_senario를 Read해야함!!!!!!!!!!
+
+
+for(i in 1:1000){
+
+Klarftemp <- read_csv("C:/Users/보안내용/Desktop/sourceklarf.001", 
+                      col_names = FALSE)
+
+##시간 일괄 수정
+Klarftemp[2,1] <- paste0("FileTimestamp ",Klarf_scenario[i,3], ";")
+
+##장비사명 및 장비아이디 수정
+Klarftemp[4,1] <- gsub("보안내용", Klarf_scenario[i,4], Klarftemp[4,1])
+Klarftemp[4,1] <- gsub("보안내용", "ASAC", Klarftemp[4,1])
+
+##시간2 일괄 수정
+Klarftemp[6,1] <- paste0("ResultTimestamp ",Klarf_scenario[i,3], ";")
+
+## Lot ID 수정
+Klarftemp[7,1] <- paste0("LotID ","\"", Klarf_scenario[i,1], "\";")
+
+## Device ID 변경
+Klarftemp[9,1] <- paste0("DeviceID ","\"", Klarf_scenario[i,6], "\";")
+
+## SetupID 수정
+Klarftemp[10,1] <- paste0("SetupID ","\"", Klarf_scenario[i,5], "\" ", Klarf_scenario[i,3], ";")
+
+## StepID 수정
+Klarftemp[11,1] <- paste0("StepID ","\"", Klarf_scenario[i,5], "\";")
+
+##이미지 파일명 수정
+Klarftemp[14,1] <- paste0("TiffFilename ",paste0(Klarf_scenario[i,1], "_", Klarf_scenario[i,2], "_", substr(Klarf_scenario[i,3],1,8),"_", i,".tif"), ";")
+
+##Diepitch 정보 수정
+Klarftemp[16,1] <- paste0("DiePitch 8.000000e+003 8.000000e+003;")
+
+##Wafer ID, Slot 수정
+Klarftemp[17,1] <- paste0("WaferID  ","\"", substr(Klarf_scenario[i,2],9,10), "\";")
+Klarftemp[18,1] <- paste0("Slot ",substr(Klarf_scenario[i,2],9,10), ";")
+
+##SampleCenterLocation 변경
+Klarftemp[19,1] <- paste0("SampleCenterLocation 0.000 0.000;")
+
+##SampleTestPlan 변경
+Klarftemp[21,1] <- paste0("SampleTestPlan 536")
+
+#Klarf 재구성
+Klarftemp <- Klarftemp[1:558,1]
+
+if(Klarf_scenario[i,7]==0){
+
+tempx <- runif(1)
+if(tempx <= 0.50){
+  Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+  Klarftemp[560,1] <- "DefectList;"
+  Klarftemp[561,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+  Klarftemp[562,1] <- "SummaryList"
+  Klarftemp[563,1] <- "1 0 1.000 536 0;"
+  Klarftemp[564,1] <- "EndOfFile;"
+}else if(tempx>=0.75){
+  Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+  Klarftemp[560,1] <- "DefectList;"
+  
+  options(scipen=-11)
+  A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+  options(scipen=10, digits=6)
+  B <- paste0(" ",round(runif(1)*24)," ",round(runif(1)*26)," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+  Klarftemp[561,1] <- paste0(A,B)
+  Klarftemp[562,1]  <- "1 0"
+  Klarftemp[563,1]  <- "2 0;"
+  
+  Klarftemp[564,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+  Klarftemp[565,1] <- "SummaryList"
+  Klarftemp[566,1] <- "1 1 1.000 535 1;"
+  Klarftemp[567,1] <- "EndOfFile;"
+} else{
+  Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+  Klarftemp[560,1] <- "DefectList;"
+  
+  options(scipen=-11)
+  A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+  options(scipen=10, digits=6)
+  AA1 <- round(runif(1)*24)
+  AA2 <- round(runif(1)*26)
+  B <- paste0(" ",AA1," ",AA2 ," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+  Klarftemp[561,1] <- paste0(A,B)
+  Klarftemp[562,1]  <- "1 0"
+  Klarftemp[563,1]  <- "2 0;"
+  
+  options(scipen=-11)
+  A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+  options(scipen=10, digits=6)
+  BB1 <- round(runif(1)*24)
+  BB2 <- round(runif(1)*26)
+  B <- paste0(" ",BB1," ",BB2," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+  Klarftemp[564,1] <- paste0(A,B)
+  Klarftemp[565,1]  <- "1 0"
+  Klarftemp[566,1]  <- "2 0;"
+  
+  
+  if(AA1==BB1 & AA2==BB2){
+    Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+    Klarftemp[568,1] <- "SummaryList"
+    Klarftemp[569,1] <- "1 1 1.000 535 1;"
+    Klarftemp[570,1] <- "EndOfFile;"
+  } else{
+  Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+  Klarftemp[568,1] <- "SummaryList"
+  Klarftemp[569,1] <- "1 2 1.000 534 2;"
+  Klarftemp[570,1] <- "EndOfFile;" 
+  }
+}
+options(scipen=100)
+
+}
+
+
+
+if(Klarf_scenario[i,7]==1){
+  
+  Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+  Klarftemp[560,1] <- "DefectList;"
+  
+  options(scipen=-11)
+  A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+  options(scipen=10, digits=6)
+  B <- paste0(" ",round(5)," ",round(5)," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+  Klarftemp[561,1] <- paste0(A,B)
+  Klarftemp[562,1]  <- "1 0"
+  Klarftemp[563,1]  <- "2 0;"
+  
+  Klarftemp[564,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+  Klarftemp[565,1] <- "SummaryList"
+  Klarftemp[566,1] <- "1 1 1.000 535 1;"
+  Klarftemp[567,1] <- "EndOfFile;"
+  
+}
+
+
+if(Klarf_scenario[i,7]==2){
+  
+  Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+  Klarftemp[560,1] <- "DefectList;"
+  
+  options(scipen=-11)
+  A <- paste0("1 ", round(runif(1)+7500), " ",round(runif(1)*8000))
+  options(scipen=10, digits=6)
+  B <- paste0(" ",round(runif(1)*10)," ",round(5)," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+  Klarftemp[561,1] <- paste0(A,B)
+  Klarftemp[562,1]  <- "1 0"
+  Klarftemp[563,1]  <- "2 0;"
+  
+  Klarftemp[564,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+  Klarftemp[565,1] <- "SummaryList"
+  Klarftemp[566,1] <- "1 1 1.000 535 1;"
+  Klarftemp[567,1] <- "EndOfFile;"
+  
+}
+
+
+if(Klarf_scenario[i,7]==3){
+ ########################################## 
+  tempx <- runif(1)
+  if(tempx <= 0.10){
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    Klarftemp[561,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+    Klarftemp[562,1] <- "SummaryList"
+    Klarftemp[563,1] <- "1 0 1.000 536 0;"
+    Klarftemp[564,1] <- "EndOfFile;"
+  }else if(tempx>=0.75){
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+    options(scipen=10, digits=6)
+    B <- paste0(" ",round(7+2*runif(1))," ",round(1+2*runif(1))," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[561,1] <- paste0(A,B)
+    Klarftemp[562,1]  <- "1 0"
+    Klarftemp[563,1]  <- "2 0;"
+    
+    Klarftemp[564,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+    Klarftemp[565,1] <- "SummaryList"
+    Klarftemp[566,1] <- "1 1 1.000 535 1;"
+    Klarftemp[567,1] <- "EndOfFile;"
+  } else{
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+    options(scipen=10, digits=6)
+    AA1 <- round(7+2*runif(1))
+    AA2 <- round(1+2*runif(1))
+    B <- paste0(" ",AA1," ",AA2 ," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[561,1] <- paste0(A,B)
+    Klarftemp[562,1]  <- "1 0"
+    Klarftemp[563,1]  <- "2 0;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+    options(scipen=10, digits=6)
+    BB1 <- round(7+2*runif(1))
+    BB2 <- round(1+2*runif(1))
+    B <- paste0(" ",BB1," ",BB2," ",round(rnorm(1,mean=500,sd=10)*1000)/1000," ",round(rnorm(1,mean=500,sd=10)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[564,1] <- paste0(A,B)
+    Klarftemp[565,1]  <- "1 0"
+    Klarftemp[566,1]  <- "2 0;"
+    
+    
+    if(AA1==BB1 & AA2==BB2){
+      Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+      Klarftemp[568,1] <- "SummaryList"
+      Klarftemp[569,1] <- "1 1 1.000 535 1;"
+      Klarftemp[570,1] <- "EndOfFile;"
+    } else{
+      Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+      Klarftemp[568,1] <- "SummaryList"
+      Klarftemp[569,1] <- "1 2 1.000 534 2;"
+      Klarftemp[570,1] <- "EndOfFile;" 
+    }
+  }
+  options(scipen=100)
+  ###############################################
+  
+}
+
+
+if(Klarf_scenario[i,7]==4){
+  ########################################## 
+  tempx <- runif(1)
+  if(tempx <= 0.01){
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    Klarftemp[561,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+    Klarftemp[562,1] <- "SummaryList"
+    Klarftemp[563,1] <- "1 0 1.000 536 0;"
+    Klarftemp[564,1] <- "EndOfFile;"
+  }else if(tempx>=0.55){
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+    options(scipen=10, digits=6)
+    B <- paste0(" ",round(23+runif(1))," ",round(16+runif(1))," ",round(rnorm(1,mean=100,sd=15)*1000)/1000," ",round(rnorm(1,mean=600,sd=200)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[561,1] <- paste0(A,B)
+    Klarftemp[562,1]  <- "1 0"
+    Klarftemp[563,1]  <- "2 0;"
+    
+    Klarftemp[564,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+    Klarftemp[565,1] <- "SummaryList"
+    Klarftemp[566,1] <- "1 1 1.000 535 1;"
+    Klarftemp[567,1] <- "EndOfFile;"
+  } else{
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+    options(scipen=10, digits=6)
+    AA1 <- round(23+runif(1))
+    AA2 <- round(16+runif(1))
+    B <- paste0(" ",AA1," ",AA2 ," ",round(rnorm(1,mean=300,sd=5)*1000)/1000," ",round(rnorm(1,mean=200,sd=20)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[561,1] <- paste0(A,B)
+    Klarftemp[562,1]  <- "1 0"
+    Klarftemp[563,1]  <- "2 0;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*8000), " ",round(runif(1)*8000))
+    options(scipen=10, digits=6)
+    BB1 <- round(23+runif(1))
+    BB2 <- round(16+runif(1))
+    B <- paste0(" ",BB1," ",BB2," ",round(rnorm(1,mean=300,sd=5)*1000)/1000," ",round(rnorm(1,mean=200,sd=20)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[564,1] <- paste0(A,B)
+    Klarftemp[565,1]  <- "1 0"
+    Klarftemp[566,1]  <- "2 0;"
+    
+    
+    if(AA1==BB1 & AA2==BB2){
+      Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+      Klarftemp[568,1] <- "SummaryList"
+      Klarftemp[569,1] <- "1 1 1.000 535 1;"
+      Klarftemp[570,1] <- "EndOfFile;"
+    } else{
+      Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+      Klarftemp[568,1] <- "SummaryList"
+      Klarftemp[569,1] <- "1 2 1.000 534 2;"
+      Klarftemp[570,1] <- "EndOfFile;" 
+    }
+  }
+  options(scipen=100)
+  ###############################################
+  
+}
+
+if(Klarf_scenario[i,7]==5){
+  
+  ########################################## 
+  tempx <- runif(1)
+  if(tempx <= 0.0001){
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    Klarftemp[561,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+    Klarftemp[562,1] <- "SummaryList"
+    Klarftemp[563,1] <- "1 0 1.000 536 0;"
+    Klarftemp[564,1] <- "EndOfFile;"
+  }else if(tempx>=0.55){
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*100+2000), " ",round(runif(1)*100+2000))
+    options(scipen=10, digits=6)
+    B <- paste0(" ",round(1+runif(1))," ",round(16)," ",round(rnorm(1,mean=100,sd=5)*1000)/1000," ",round(rnorm(1,mean=100,sd=5)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[561,1] <- paste0(A,B)
+    Klarftemp[562,1]  <- "1 0"
+    Klarftemp[563,1]  <- "2 0;"
+    
+    Klarftemp[564,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+    Klarftemp[565,1] <- "SummaryList"
+    Klarftemp[566,1] <- "1 1 1.000 535 1;"
+    Klarftemp[567,1] <- "EndOfFile;"
+  } else{
+    Klarftemp[559,1] <- "DefectRecordSpec 17 DEFECTID XREL YREL XINDEX YINDEX XSIZE YSIZE DEFECTAREA DSIZE CLASSNUMBER TEST CLUSTERNUMBER ROUGHBINNUMBER FINEBINNUMBER REVIEWSAMPLE IMAGECOUNT IMAGELIST;"
+    Klarftemp[560,1] <- "DefectList;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*100+2000), " ",round(runif(1)*100+2000))
+    options(scipen=10, digits=6)
+    AA1 <- round(1+runif(1))
+    AA2 <- round(16)
+    B <- paste0(" ",AA1," ",AA2 ," ",round(rnorm(1,mean=100,sd=5)*1000)/1000," ",round(rnorm(1,mean=100,sd=5)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[561,1] <- paste0(A,B)
+    Klarftemp[562,1]  <- "1 0"
+    Klarftemp[563,1]  <- "2 0;"
+    
+    options(scipen=-11)
+    A <- paste0("1 ", round(runif(1)*100+2000), " ",round(runif(1)*100+2000))
+    options(scipen=10, digits=6)
+    BB1 <- round(1+runif(1))
+    BB2 <- round(16)
+    B <- paste0(" ",BB1," ",BB2," ",round(rnorm(1,mean=100,sd=5)*1000)/1000," ",round(rnorm(1,mean=100,sd=5)*1000)/1000, " 0 0.000000 232 1 0 100 0 0 2 2")
+    Klarftemp[564,1] <- paste0(A,B)
+    Klarftemp[565,1]  <- "1 0"
+    Klarftemp[566,1]  <- "2 0;"
+    
+    
+    if(AA1==BB1 & AA2==BB2){
+      Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+      Klarftemp[568,1] <- "SummaryList"
+      Klarftemp[569,1] <- "1 1 1.000 535 1;"
+      Klarftemp[570,1] <- "EndOfFile;"
+    } else{
+      Klarftemp[567,1] <- "SummarySpec 5 TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE;"
+      Klarftemp[568,1] <- "SummaryList"
+      Klarftemp[569,1] <- "1 2 1.000 534 2;"
+      Klarftemp[570,1] <- "EndOfFile;" 
+    }
+  }
+  options(scipen=100)
+  ###############################################
+  
+  
+}
+
+
+setwd("C:/Users/보안내용/Desktop/klarfsample/")
+
+filename <- paste0(Klarf_scenario[i,1], "_", Klarf_scenario[i,2], "_", substr(Klarf_scenario[i,3],1,8),"_", i,".001")
+
+write.table(Klarftemp, file=filename,quote=FALSE, col.names=FALSE, row.names=FALSE)
+}
