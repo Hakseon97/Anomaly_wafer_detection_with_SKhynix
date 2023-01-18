@@ -179,4 +179,4 @@ summary_df = pd.DataFrame(data=summarySpec, columns=summaryCols, index=np.arange
 defect_df = pd.merge(summary_df, defect_df, how='inner', left_on='FILE', right_on='FILE')
 
 defect_df.to_csv("./temp_defect_info.csv", index=False)
-print('데이터 추출 완료')
+print('데이터 추출 완료: temp_klarf_info.csv | temp_defect_info.csv')
