@@ -6,18 +6,14 @@
 # 4. 만약 검출되면, 해당 INDEX를 역추적하여 어떤 장비가 이상있는지 확인.
 #  * 미리 저장되어있는 Dataframe의 시간을 최대 3일로 설정. 
 
-
 import pandas as pd
 import numpy as np
 from scipy import interpolate
 import matplotlib.pyplot as plt
-
 import glob, os
 from datetime import datetime
 import re
-
 import joblib
-
 
 
 ############################################################################################################################
@@ -360,6 +356,7 @@ pred = pd.DataFrame(rf.predict(test_df), index=test_df.index)
 idx = pred[pred[0] == 1].index
 anomaly_df = df.iloc[idx,:]
 
+print("검사시간: {}\n\n".format(datetime.now()))
 if anomaly_df.MachineID.nunique() == 1:
     print('장비 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.MachineID.unique()))
 if anomaly_df.StepID.nunique() == 1:
