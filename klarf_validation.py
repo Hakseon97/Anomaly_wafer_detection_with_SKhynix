@@ -349,19 +349,25 @@ def make_amplitude_df(df):
 test_df = make_amplitude_df(amp_df)
 
 ## 3. 미리 학습된 모델로 해당 KLARF파일을 검증하여 연속적인 Defects이 나왔는지 검출.
-rf = joblib.load("./basic_rf.pkl")
-pred = pd.DataFrame(rf.predict(test_df), index=test_df.index)
+model = joblib.load("./basic_rf.pkl")
+pred = pd.DataFrame(model.predict(test_df), index=test_df.index)
 
 ## 4. 만약 검출되면, 해당 INDEX를 역추적하여 어떤 장비가 이상있는지 확인.
 idx = pred[pred[0] == 1].index
 anomaly_df = df.iloc[idx,:]
 
-print("검사시간: {}\n\n".format(datetime.now()))
-if anomaly_df.MachineID.nunique() == 1:
-    print('장비 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.MachineID.unique()))
-if anomaly_df.StepID.nunique() == 1:
-    print('검사방법 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.StepID.unique()))
-if anomaly_df.DeviceID.nunique() == 1:
-    print('제품공정 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.DeviceID.unique()))
-if anomaly_df.LotID.nunique() == 1:
-    print('Lot ID {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.LotID.unique()))
+## 5. 결과 log를 txt파일로 저장.
+now = datetime.now()
+with open(f'result_log.txt', 'a') as f:
+    f.write("="*50)
+    f.write("\n")
+    f.write(f"검사시간: {now}\n\n")
+    if anomaly_df.MachineID.nunique() == 1:
+        f.write('장비 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.MachineID.unique()))
+    if anomaly_df.StepID.nunique() == 1:
+        f.write('검사방법 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.StepID.unique()))
+    if anomaly_df.DeviceID.nunique() == 1:
+        f.write('제품공정 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.DeviceID.unique()))
+    if anomaly_df.LotID.nunique() == 1:
+        f.write('Lot ID {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.LotID.unique()))
+    f.write("\n")
