@@ -93,7 +93,6 @@ class UI(QMainWindow):
         file_path = os.path.join(dir_path+'/*')
         file_list = glob.glob(file_path)
         start = time.time()
-        self.resultTxt.append('검사시간: {}'.format(datetime.now()))
         def readfile(file_list):
             readlines = []
             with open(file_list, 'r') as f:
@@ -352,7 +351,7 @@ class UI(QMainWindow):
                             batch_deg.append(d + 360*n)
                     except:
                         pass
-                    
+                
                 intp, xnew = batch_graph(batch_deg, batch_dist)
                 df.at[i+cfg.n_window-1,"Amplitude"] = amp_data(intp(xnew)).astype('object')
             return df
@@ -399,25 +398,31 @@ class UI(QMainWindow):
         ## 4. 만약 검출되면, 해당 INDEX를 역추적하여 어떤 장비가 이상있는지 확인.
         idx = pred[pred[0] == 1].index
         anomaly_df = df.iloc[idx,:]
+        anomaly_df["YMD"] = anomaly_df.Timestamp.apply(lambda x: datetime.strftime(x, "%Y-%m-%d"))
 
-        ## 5. 결과 log를 txt파일로 저장.
-        now = datetime.now()
+        ## 5. 결과 log를 txt파일로 저장. 
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
         with open(f'result_log.txt', 'a') as f:
             f.write("="*50)
             f.write("\n")
-            f.write(f"검사시간: {now}\n\n")
-            if anomaly_df.MachineID.nunique() == 1:
-                f.write('장비 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.MachineID.unique()))
-                self.resultTxt.append('장비 {}에 대한 확인이 필요합니다.'.format(anomaly_df.MachineID.unique()))
-            if anomaly_df.StepID.nunique() == 1:
-                f.write('검사방법 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.StepID.unique()))
-                self.resultTxt.append('검사방법 {}에 대한 확인이 필요합니다.'.format(anomaly_df.StepID.unique()))
-            if anomaly_df.DeviceID.nunique() == 1:
-                f.write('제품공정 {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.DeviceID.unique()))
-                self.resultTxt.append('제품공정 {}에 대한 확인이 필요합니다.'.format(anomaly_df.DeviceID.unique()))
-            if anomaly_df.LotID.nunique() == 1:
-                f.write('Lot ID {}에 대한 확인이 필요합니다.\n'.format(anomaly_df.LotID.unique()))
-                self.resultTxt.append('Lot ID {}에 대한 확인이 필요합니다.'.format(anomaly_df.LotID.unique()))
+            f.write(f"실행시각: {now}\n")
+            self.resultTxt.append(f'실행시각: {now}\n')
+            for ymd in anomaly_df.YMD.unique():
+                temp = anomaly_df[anomaly_df.YMD == ymd]
+                
+                f.write(f'------------- {ymd} -------------\n')
+                f.write(f'검사장비 {temp.MachineID.unique()}\n')
+                f.write(f'검사방법 {temp.MachineID.unique()}\n')
+                f.write(f'제품공정 {temp.DeviceID.unique()}\n')
+                f.write("에 대한 확인이 필요합니다.\n\n")
+                
+                self.resultTxt.append(f'------------- {ymd} -------------')
+                self.resultTxt.append(f'검사장비 {temp.MachineID.unique()}')
+                self.resultTxt.append(f'검사방법 {temp.StepID.unique()}')
+                self.resultTxt.append(f'제품공정 {temp.DeviceID.unique()}')
+                self.resultTxt.append('에 대한 확인이 필요합니다.\n')
+                
             f.write("\n")
         self.resultTxt.append('\n')
         
