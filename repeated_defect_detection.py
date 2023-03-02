@@ -90,9 +90,10 @@ class UI(QMainWindow):
     def detecting(self):
         ## 1. 일정한 시간(@5분)마다 py파일 실행하여 폴더 내의 모든 KLARF파일을 Dataframe으로 변환.
         #- 5분마다 py. file 실행하여 폴더 내 모든 klarf 파일 변환
-        file_path = os.path.join(dir_path+'/*')
+        file_path = os.path.join(dir_path, '*.001')
         file_list = glob.glob(file_path)
         start = time.time()
+        
         def readfile(file_list):
             readlines = []
             with open(file_list, 'r') as f:
@@ -112,40 +113,34 @@ class UI(QMainWindow):
         for i, file in enumerate(file_list):
             dict_klarf = {}
             for line in readfile(file):
-                if not line[1].isnumeric():
+                if not line[1].lstrip('-').isnumeric():
                     dict_klarf[line[1]] = ' '.join(line[2:])
             fname.append(os.path.basename(file).split('.')[0])
             temp = pd.DataFrame(dict_klarf, index=[i])
             temp_df = pd.concat([temp_df, temp])
 
-        temp_df['FileName'] = fname
-        cols = ['FileName']
+        temp_df.columns = temp_df.columns.str.lower()
+        temp_df['filename'] = fname
+        cols = ['filename']
         cols.extend(temp_df.columns[:-1])
         temp_df = temp_df[cols]
 
-        # unique값이 1인 columns 정리
-        singleCols = ['FileVersion',
-                'TiffSpec',
-                'SampleType',
-                'SampleSize',
-                'SampleOrientationMarkType',
-                'OrientationMarkLocation',
-                'DiePitch',
-                'SampleCenterLocation',
-                'InspectionTest',
-                'SampleTestPlan',
-                'AreaPerTest',
-                'DefectRecordSpec',
-                'DefectList',
-                'SummarySpec',
-                'SummaryList',
-                'EndOfFile',
-                'DefectList',
-                'SummaryList']
+        # 컬럼 미리 선정.
+        selectCols = [
+            "filename",
+            "filetimestamp",
+            "inspectionstationid",
+            "lotid",
+            "deviceid",
+            "setupid",
+            "stepid",
+            "tifffilename",
+            "waferid",
+            "slot"
+            ]
 
-        # 위에서 정리한 columns에 이미 dataframe으로 만든 DefectList, SummaryList columns 추가
-        singleCols.extend(["DefectList", "SummaryList"])
-        temp_df.drop(columns=singleCols, inplace=True)
+        # 미리 선정한 컬럼만 추출
+        temp_df = temp_df[selectCols]
 
         # column 비교 후 제거 함수
         # 보존할 column = col1
@@ -159,62 +154,87 @@ class UI(QMainWindow):
                 df.drop(columns=col2, inplace=True)
             return df
 
-        # FileTimestamp column과 ResultTimestamp column이 동일하면 해당 컬럼 삭제
-        temp_df = eliminate(temp_df, "FileTimestamp", "ResultTimestamp")
-
         # temp_df의 FileTimestamp를 datetime형으로 변환
         # 현재 %m-%d-%y %H:%M:%S 형태로 되어있음. 이를 %Y-%m-%d %H:%M:%S
-        temp_df.FileTimestamp = temp_df.FileTimestamp.apply(lambda x: datetime.strptime(x, "%m-%d-%y %H:%M:%S"))
+        temp_df.filetimestamp = temp_df.filetimestamp.apply(lambda x: datetime.strptime(x, "%m-%d-%y %H:%M:%S"))
 
         # A3D01, A3D02로 요약
-        temp_df.InspectionStationID = temp_df.InspectionStationID.apply(lambda x: x.strip('"').split('" "')[-1])
+        temp_df.inspectionstationid = temp_df.inspectionstationid.apply(lambda x: x.strip('"').split('" "')[-1])
 
         # "LotID", "DeviceID", "StepID", "WaferID" columns에 대해 " " 제거
-        temp_df[["LotID", "DeviceID", "StepID", "WaferID"]] = \
-        temp_df[["LotID", "DeviceID", "StepID", "WaferID"]].applymap(lambda x: x.strip(' "'))
+        temp_df[["setupid", "lotid", "deviceid", "stepid", "waferid"]] = \
+            temp_df[["setupid", "lotid", "deviceid", "stepid", "waferid"]].applymap(lambda x: x.replace('"',''))
 
         # WaferID column과 Slot column이 동일한지 확인.
         # 동일하면 Slot column 제거
         # 동일하지 않다면, Fab에 문제가 생긴것..
-        temp_df = eliminate(temp_df, "WaferID", "Slot")
+        temp_df = eliminate(temp_df, "waferid", "slot")
 
         # SetupID column에서 timestamp가 FileTimestamp와 일치하는지 확인.
         # 완벽히 일치한다면 해당 timestamp만 제거.
-        if temp_df[temp_df.SetupID.apply(lambda x: datetime.strptime(x.split('"')[2].strip(' '), "%m-%d-%y %H:%M:%S"))
-            != temp_df.FileTimestamp].size == 0:
-            temp_df.SetupID = temp_df.SetupID.apply(lambda x: x.split('"')[1])
+        if temp_df[temp_df.setupid.apply(lambda x: datetime.strptime(' '.join(x.split(" ")[1:]).strip(' '), "%m-%d-%y %H:%M:%S"))
+                   != temp_df.filetimestamp].size == 0:
+            temp_df.setupid = temp_df.setupid.apply(lambda x: x.split(" ")[0])
 
         # 수정된 SetupID column에서 Metrology-Type이 StepID와 일치하는지 확인.
         # 완벽히 일치한다면 해당 column 제거.
-        temp_df = eliminate(temp_df, 'StepID', 'SetupID')
+        temp_df = eliminate(temp_df, 'stepid', 'setupid')
 
         # StepID의 column 통일
-        temp_df.StepID = temp_df.StepID.apply(lambda x: x.split('-')[0]
-                                        + '-T' + x.split('-')[1][1:]
-                                        + '-' + x.split('-')[2])
-
+        temp_df.stepid = temp_df.stepid.apply(lambda x: x.upper())
+        
         # TiffFilename column이 FileName column과 일치하면 제거.
-        temp_df[["FileName", "TiffFilename"]] = temp_df[["FileName", "TiffFilename"]].applymap(lambda x: x.split('.')[0])
-        temp_df = eliminate(temp_df, "FileName", "TiffFilename")
+        temp_df[["filename", "tifffilename"]] = temp_df[["filename", "tifffilename"]].applymap(lambda x: x.split('.')[0])
+        temp_df = eliminate(temp_df, "filename", "tifffilename")
 
         # WaferID에 LotID 정보 추가
-        temp_df.WaferID = temp_df.LotID.apply(lambda x: re.split('\d+', x)[0]+re.split('\D+', x)[1]) + '-' + temp_df.WaferID
+        temp_df.waferid = temp_df.lotid.apply(lambda x: re.split('\d+', x)[0]+re.split('\D+', x)[1]) + '-' + temp_df.waferid
 
         # columns 이름 변경
         # FileTimestamp -> Timestamp
         # InspectionStationID -> MachineID
-        temp_df.rename(columns={'FileTimestamp': 'Timestamp',
-                            'InspectionStationID': 'MachineID'}, inplace=True)
+        temp_df.rename(columns={'filetimestamp': 'timestamp',
+                                'inspectionstationid': 'machineid'}, inplace=True)
 
         # columns 순서 변경
-        newcols = ['FileName', 'LotID', 'WaferID', 'Timestamp', 'MachineID', 'StepID', 'DeviceID']
+        newcols = ['filename', 'lotid', 'waferid', 'timestamp', 'machineid', 'stepid', 'deviceid']
         temp_df = temp_df[newcols]
 
         # timestamp 순으로 정렬
-        temp_df = temp_df.sort_values('Timestamp').reset_index(drop=True)
+        temp_df = temp_df.sort_values('timestamp').reset_index(drop=True)
 
-        ##
-        # Defect 정보 parsing
+
+        ## Defect 좌표 기준 통일
+        readlines = readfile(file_list[0])
+        cnt = 0
+        for line in readlines:
+            if line[1] == 'SampleDieMap':
+                firstRow = int(line[0])
+                cnt += 1
+            elif line[1] == 'SampleTestPlan' and cnt == 1:
+                lastRow = int(line[0]) - 3
+            elif line[1] == 'SampleTestPlan' and cnt == 0:
+                firstRow = int(line[0])
+            elif line[1] == 'AreaPerTest' and cnt == 0:
+                lastRow = int(line[0]) - 2
+
+        wafer_x_coordinate = np.array([int(line[1]) for line in readlines[firstRow:lastRow+1]])
+        wafer_y_coordinate = np.array([int(line[2]) for line in readlines[firstRow:lastRow+1]])
+
+        calib_x = 1-min(wafer_x_coordinate)
+        calib_y = 1-min(wafer_y_coordinate)
+        # 1-min(wafer_coordinate)의 보정이 필요.
+        wafer_x_coordinate += np.array([calib_x]*len(wafer_x_coordinate))
+        wafer_y_coordinate += np.array([calib_y]*len(wafer_y_coordinate))
+
+        x_max = max(wafer_x_coordinate)
+        y_max = max(wafer_y_coordinate)
+
+        base_wafer = np.zeros([x_max+2, y_max+2])
+        for x,y in zip(wafer_x_coordinate, wafer_y_coordinate):
+            base_wafer[x,y] = 1
+
+        ## Defect 정보 parsing
         # DefectList를 dataframe으로 변환.
         defectList = []
         for file in file_list:
@@ -241,44 +261,22 @@ class UI(QMainWindow):
                 temp.extend(np.zeros(17).tolist())
                 defectList.append(temp)
 
-        temp_defectDF = pd.DataFrame(data=defectList, columns=defectCols)
-        temp_defectDF[["XINDEX", "YINDEX"]] = temp_defectDF[["XINDEX", "YINDEX"]].astype('int')
-
-        # Summary Spec.을 DataFrame으로 변환
-        summarySpec = []
-        for file in file_list:
-            readlines = readfile(file)
-            for line in readlines:
-                if line[1] == 'SummarySpec':
-                    summaryRow = int(line[0])
-                    
-            summaryCols = ['FILE']
-            summaryCols.extend(readlines[summaryRow-1][3:])
-            if readlines[summaryRow+1][1].isnumeric():
-                temp = [os.path.basename(file).split('.')[0]]
-                temp.extend(readlines[summaryRow+1][1:])
-                summarySpec.append(temp)
-            else:
-                temp = [os.path.basename(file).split('.')[0]]
-                temp.extend(np.zeros(5).tolist())
-                summarySpec.append(temp)
-        summary_df = pd.DataFrame(data=summarySpec, columns=summaryCols, index=np.arange(len(file_list)))
-
-        # defect_df와 summary_df merge
-        defect_df = pd.merge(summary_df, temp_defectDF, how='inner', left_on='FILE', right_on='FILE')
-
+        defect_df = pd.DataFrame(data=defectList, columns=defectCols)
+        defect_df[["XINDEX", "YINDEX"]] = defect_df[["XINDEX", "YINDEX"]].astype('int')
+        defect_df[["XINDEX", "YINDEX"]] += [calib_x,calib_y]
+        
         # defect_df에 defects 정보 추가
-        defect_df["MAP"] = defect_df[["XINDEX", "YINDEX"]].apply(list, axis=1)
+        defect_df["map"] = defect_df[["XINDEX", "YINDEX"]].apply(list, axis=1)
         def appendFn(*listset):
             lst = []
             for list_ in listset:
                 lst.append(list_)
             return lst
 
-        defect_temp = defect_df.groupby(['FILE'], group_keys=False)["MAP"].apply(appendFn).reset_index()
-        defect_temp.MAP = defect_temp.MAP.apply(lambda x: np.array(x).squeeze(0))
+        defect_temp = defect_df.groupby(['FILE'], group_keys=False)["map"].apply(appendFn).reset_index()
+        defect_temp.map = defect_temp.map.apply(lambda x: np.array(x).squeeze(0))
 
-        base_df = pd.merge(temp_df, defect_temp, how='inner', left_on='FileName', right_on='FILE').drop(columns=["FILE", "FileName"])
+        base_df = pd.merge(temp_df, defect_temp, how='inner', left_on='filename', right_on='FILE').drop(columns=["FILE", "filename"])
 
         end = time.time()
         test_time = end - start
@@ -289,7 +287,7 @@ class UI(QMainWindow):
         class cfg:
             seed = 1234
             n_window = 3 # 한 batch에 확인할 wafer 수 -> 10
-            origin = [12.5, 13.5] # wafer의 원점 정의
+            origin = origin = [(base_wafer.shape[0]-1)/2, (base_wafer.shape[1]-1)/2] # wafer의 원점 정의
             
         # batch dataset visualization v2
         def dist(origin, defects):
@@ -316,13 +314,12 @@ class UI(QMainWindow):
             return theta
 
         df = base_df.copy()
-        df["Distance"] = df.MAP.apply(lambda x:dist(cfg.origin, x))
-        df["Degree"] = df.MAP.apply(lambda x:theta(cfg.origin, x))
+        df["distance"] = df.map.apply(lambda x:dist(cfg.origin, x))
+        df["degree"] = df.map.apply(lambda x:theta(cfg.origin, x))
 
         def batch_graph(degree, distance):
             intp = interpolate.interp1d(degree, distance, kind='linear') # linear, cubic, nearest ...
             xnew = np.arange(min(degree), max(degree), 0.1)
-            
             return intp, xnew
 
         # fft후, amplitude 값 컬럼 추가
@@ -334,7 +331,7 @@ class UI(QMainWindow):
         def add_amplitude(df):
             nRows = len(df) - cfg.n_window + 1
             for i in range(nRows):
-                df_dist = df.Distance[i:cfg.n_window + i].tolist()
+                df_dist = df.distance[i:cfg.n_window + i].tolist()
                 batch_dist = []
                 for dist in df_dist:
                     try:
@@ -343,7 +340,7 @@ class UI(QMainWindow):
                     except:
                         pass
                     
-                df_deg = df.Degree[i:cfg.n_window + i].tolist()
+                df_deg = df.degree[i:cfg.n_window + i].tolist()
                 batch_deg = []
                 for n, deg in enumerate(df_deg):
                     try:
@@ -353,12 +350,12 @@ class UI(QMainWindow):
                         pass
                 
                 intp, xnew = batch_graph(batch_deg, batch_dist)
-                df.at[i+cfg.n_window-1,"Amplitude"] = amp_data(intp(xnew)).astype('object')
+                df.at[i+cfg.n_window-1,"amplitude"] = amp_data(intp(xnew)).astype('object')
             return df
 
-        machine_type = df["MachineID"].unique()
-        step_type = df["StepID"].unique()
-        device_type = df["DeviceID"].unique()
+        machine_type = df["machineid"].unique()
+        step_type = df["stepid"].unique()
+        device_type = df["deviceid"].unique()
 
         temp_df = pd.DataFrame()
         case = 0
@@ -366,31 +363,30 @@ class UI(QMainWindow):
             for s in step_type:
                 for d in device_type:
                     case += 1
-                    temp = df[(df.MachineID == m) & (df.StepID == s) & (df.DeviceID == d)].reset_index()
+                    temp = df[(df.machineid == m) & (df.stepid == s) & (df.deviceid == d)].reset_index()
                     if len(temp) == 0:
                         continue
-                    
                     temp = add_amplitude(temp)
-                    temp['Case'] = case
+                    temp['case'] = case
                     temp_df = pd.concat([temp_df, temp], axis=0)
                     
         temp_df = temp_df.sort_values(by='index').reset_index(drop=True)
 
-        amp_df = temp_df[["Amplitude"]]
-        amp_df = amp_df[amp_df.Amplitude.notnull()]
+        amp_df = temp_df[["amplitude"]]
+        amp_df = amp_df[amp_df.amplitude.notnull()]
 
         def make_amplitude_df(df):
-            arr = np.array(df.Amplitude.iloc[0]).reshape(1,-1)
+            arr = np.array(df.amplitude.iloc[0]).reshape(1,-1)
             cols = np.array([i for i in range(arr.shape[1])])
             idx = df.index
             for i in range(1,len(df)):
-                arr = np.append(arr, df.Amplitude.iloc[i].reshape(1,-1), axis=0)
-                
+                arr = np.append(arr, df.amplitude.iloc[i].reshape(1,-1), axis=0)
             df = pd.DataFrame(arr, columns=cols, index=idx)
             return df
 
         test_df = make_amplitude_df(amp_df)
-        base_df["Case"] = temp_df.Case
+        base_df["case"] = temp_df.case
+        
         ## 3. 미리 학습된 모델로 해당 KLARF파일을 검증하여 연속적인 Defects이 나왔는지 검출.
         model = joblib.load(model_path)
         pred = pd.DataFrame(model.predict(test_df), index=test_df.index)
@@ -398,7 +394,7 @@ class UI(QMainWindow):
         ## 4. 만약 검출되면, 해당 INDEX를 역추적하여 어떤 장비가 이상있는지 확인.
         idx = pred[pred[0] == 1].index
         anomaly_df = df.iloc[idx,:]
-        anomaly_df["YMD"] = anomaly_df.Timestamp.apply(lambda x: datetime.strftime(x, "%Y-%m-%d"))
+        anomaly_df["ymd"] = anomaly_df.timestamp.apply(lambda x: datetime.strftime(x, "%Y-%m-%d"))
 
         ## 5. 결과 log를 txt파일로 저장. 
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -408,19 +404,21 @@ class UI(QMainWindow):
             f.write("\n")
             f.write(f"실행시각: {now}\n")
             self.resultTxt.append(f'실행시각: {now}\n')
-            for ymd in anomaly_df.YMD.unique():
-                temp = anomaly_df[anomaly_df.YMD == ymd]
+            for ymd in anomaly_df.ymd.unique():
+                temp = anomaly_df[anomaly_df.ymd == ymd]
                 
                 f.write(f'------------- {ymd} -------------\n')
-                f.write(f'검사장비 {temp.MachineID.unique()}\n')
-                f.write(f'검사방법 {temp.MachineID.unique()}\n')
-                f.write(f'제품공정 {temp.DeviceID.unique()}\n')
+                f.write(f'검사장비 {temp.machineid.unique()}\n')
+                f.write(f'검사방법 {temp.stepid.unique()}\n')
+                f.write(f'제품공정 {temp.deviceid.unique()}\n')
+                f.write(f'로트번호 {temp.lotid.unique()}\n')
                 f.write("에 대한 확인이 필요합니다.\n\n")
                 
                 self.resultTxt.append(f'------------- {ymd} -------------')
-                self.resultTxt.append(f'검사장비 {temp.MachineID.unique()}')
-                self.resultTxt.append(f'검사방법 {temp.StepID.unique()}')
-                self.resultTxt.append(f'제품공정 {temp.DeviceID.unique()}')
+                self.resultTxt.append(f'검사장비 {temp.machineid.unique()}')
+                self.resultTxt.append(f'검사방법 {temp.stepid.unique()}')
+                self.resultTxt.append(f'제품공정 {temp.deviceid.unique()}')
+                self.resultTxt.append(f'로트번호 {temp.lotid.unique()}')
                 self.resultTxt.append('에 대한 확인이 필요합니다.\n')
                 
             f.write("\n")
