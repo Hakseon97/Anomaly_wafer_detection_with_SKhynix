@@ -32,29 +32,34 @@ fname = []
 for i, fp in enumerate(file_path):
     dict_klarf = {}
     for line in readfile(fp):
-        if not line[1].isnumeric():
+        if not line[1].lstrip('-').isnumeric():
             dict_klarf[line[1]] = ' '.join(line[2:])
     fname.append(fp.split('/')[1])
     temp = pd.DataFrame(dict_klarf, index=[i])
     temp_df = pd.concat([temp_df, temp])
 
-
-temp_df['FileName'] = fname
-cols = ['FileName']
+temp_df.columns = temp_df.columns.str.lower()
+temp_df['filename'] = fname
+cols = ['filename']
 cols.extend(temp_df.columns[:-1])
 
 temp_df = temp_df[cols]
 
-# unique값이 1인 columns 정리
-singleCols = []
-for col in temp_df.columns:
-    if len(temp_df[col].unique()) == 1:
-        singleCols.append(col)
-    
-# 위에서 정리한 columns에 이미 dataframe으로 만든 DefectList, SummaryList columns 추가
-singleCols.extend(["DefectList", "SummaryList"])
-
-temp_df.drop(columns=singleCols, inplace=True)
+# 컬럼 미리 선정.
+selectCols = [
+    "filename",
+    "filetimestamp",
+    "inspectionstationid",
+    "lotid",
+    "deviceid",
+    "setupid",
+    "stepid",
+    "tifffilename",
+    "waferid",
+    "slot"
+    ]
+# 특정 columns만 추출
+temp_df = temp_df[selectCols]
 
 # column 비교 후 제거 함수
 # 보존할 column = col1
@@ -68,64 +73,89 @@ def eliminate(df, col1, col2):
         df.drop(columns=col2, inplace=True)
     return df
 
-# FileTimestamp column과 ResultTimestamp column이 동일하면 해당 컬럼 삭제
-temp_df = eliminate(temp_df, "FileTimestamp", "ResultTimestamp")
-
 # temp_df의 FileTimestamp를 datetime형으로 변환
 # 현재 %m-%d-%y %H:%M:%S 형태로 되어있음. 이를 %Y-%m-%d %H:%M:%S
 
-temp_df.FileTimestamp = temp_df.FileTimestamp.apply(lambda x: datetime.strptime(x, "%m-%d-%y %H:%M:%S"))
+temp_df.filetimestamp = temp_df.filetimestamp.apply(lambda x: datetime.strptime(x, "%m-%d-%y %H:%M:%S"))
 
 # A3D01, A3D02로 요약할 수 있음.
-temp_df.InspectionStationID = temp_df.InspectionStationID.apply(lambda x: x.strip('"').split('" "')[-1])
+temp_df.inspectionstationid = temp_df.inspectionstationid.apply(lambda x: x.strip('"').split('" "')[-1])
 
 # "LotID", "DeviceID", "StepID", "WaferID" columns에 대해 " " 제거
-temp_df[["LotID", "DeviceID", "StepID", "WaferID"]] = \
-    temp_df[["LotID", "DeviceID", "StepID", "WaferID"]].applymap(lambda x: x.strip(' "'))
+temp_df[["setupid", "lotid", "deviceid", "stepid", "waferid"]] = \
+    temp_df[["setupid", "lotid", "deviceid", "stepid", "waferid"]].applymap(lambda x: x.replace('"',''))
     
 # WaferID column과 Slot column이 동일한지 확인.
 # 동일하면 Slot column 제거
 # 동일하지 않다면, Fab에 문제가 생긴것..
 
-temp_df = eliminate(temp_df, "WaferID", "Slot")
+temp_df = eliminate(temp_df, "waferid", "slot")
 
 # SetupID column에서 timestamp가 FileTimestamp와 일치하는지 확인.
 # 완벽히 일치한다면 해당 timestamp만 제거.
-if temp_df[temp_df.SetupID.apply(lambda x: datetime.strptime(x.split('"')[2].strip(' '), "%m-%d-%y %H:%M:%S"))
-        != temp_df.FileTimestamp].size == 0:
-    temp_df.SetupID = temp_df.SetupID.apply(lambda x: x.split('"')[1])
+if temp_df[temp_df.setupid.apply(lambda x: datetime.strptime(' '.join(x.split(" ")[1:]).strip(' '), "%m-%d-%y %H:%M:%S"))
+        != temp_df.filetimestamp].size == 0:
+    temp_df.setupid = temp_df.setupid.apply(lambda x: x.split(" ")[0])
 
 # 수정된 SetupID column에서 Metrology-Type이 StepID와 일치하는지 확인.
 # 완벽히 일치한다면 해당 column 제거.
-temp_df = eliminate(temp_df, 'StepID', 'SetupID')
+temp_df = eliminate(temp_df, 'stepid', 'setupid')
 
 # StepID의 column 통일
-temp_df.StepID = temp_df.StepID.apply(lambda x: x.split('-')[0]
-                                      + '-T' + x.split('-')[1][1:]
-                                      + '-' + x.split('-')[2])
+temp_df.stepid = temp_df.stepid.apply(lambda x: x.upper())
 
 # TiffFilename column이 FileName column과 일치하면 제거.
-temp_df[["FileName", "TiffFilename"]] = temp_df[["FileName", "TiffFilename"]].applymap(lambda x: x.split('.')[0])
-temp_df = eliminate(temp_df, "FileName", "TiffFilename")
+temp_df[["filename", "tifffilename"]] = temp_df[["filename", "tifffilename"]].applymap(lambda x: x.split('.')[0])
+temp_df = eliminate(temp_df, "filename", "tifffilename")
 
 # WaferID에 LotID 정보 추가
-temp_df.WaferID = temp_df.LotID.apply(lambda x: re.split('\d+', x)[0]+re.split('\D+', x)[1]) + '-' + temp_df.WaferID
+temp_df.waferid = temp_df.lotid.apply(lambda x: re.split('\d+', x)[0]+re.split('\D+', x)[1]) + '-' + temp_df.waferid
 
 # columns 이름 변경
 # FileTimestamp -> Timestamp
 # InspectionStationID -> MachineID
-temp_df.rename(columns={'FileTimestamp': 'Timestamp',
-                        'InspectionStationID': 'MachineID'}, inplace=True)
+temp_df.rename(columns={'filetimestamp': 'timestamp',
+                        'inspectionstationid': 'machineid'}, inplace=True)
 
 # columns 순서 변경
-newcols = ['FileName', 'LotID', 'WaferID', 'Timestamp', 'MachineID', 'StepID', 'DeviceID']
+newcols = ['filename', 'lotid', 'waferid', 'timestamp', 'machineid', 'stepid', 'deviceid']
 temp_df = temp_df[newcols]
 
 # timestamp 순으로 정렬
-temp_df = temp_df.sort_values('Timestamp').reset_index(drop=True)
+temp_df = temp_df.sort_values('timestamp').reset_index(drop=True)
 
 temp_df.to_csv('./temp_klarf_info.csv', index=False)
 ################################################################################################
+## Defect 좌표 기준 통일
+readlines = readfile(file_path[0])
+cnt = 0
+for line in readlines:
+    if line[1] == 'SampleDieMap':
+        firstRow = int(line[0])
+        cnt += 1
+    elif line[1] == 'SampleTestPlan' and cnt == 1:
+        lastRow = int(line[0]) - 3
+    elif line[1] == 'SampleTestPlan' and cnt == 0:
+        firstRow = int(line[0])
+    elif line[1] == 'AreaPerTest' and cnt == 0:
+        lastRow = int(line[0]) - 2
+
+wafer_x_coordinate = np.array([int(line[1]) for line in readlines[firstRow:lastRow+1]])
+wafer_y_coordinate = np.array([int(line[2]) for line in readlines[firstRow:lastRow+1]])
+
+calib_x = 1-min(wafer_x_coordinate)
+calib_y = 1-min(wafer_y_coordinate)
+# 1-min(wafer_coordinate)의 보정이 필요.
+wafer_x_coordinate += np.array([calib_x]*len(wafer_x_coordinate))
+wafer_y_coordinate += np.array([calib_y]*len(wafer_y_coordinate))
+
+x_min, x_max = min(wafer_x_coordinate), max(wafer_x_coordinate)
+y_min, y_max = min(wafer_y_coordinate), max(wafer_y_coordinate)
+
+base_wafer = np.zeros([x_max+2, y_max+2])
+for x,y in zip(wafer_x_coordinate, wafer_y_coordinate):
+    base_wafer[x,y] = 1
+
 # Defect 정보 parsing
 defectList = []
 for fp in file_path:
@@ -153,30 +183,6 @@ for fp in file_path:
         defectList.append(temp)
 
 defect_df = pd.DataFrame(data=defectList, columns=defectCols)
-
-# Summary Spec.을 DataFrame으로 변환
-
-summarySpec = []
-for fp in file_path:
-    readlines = readfile(fp)
-    for line in readlines:
-        if line[1] == 'SummarySpec':
-            summaryRow = int(line[0])
-            
-    summaryCols = ['FILE']
-    summaryCols.extend(readlines[summaryRow-1][3:])
-    if readlines[summaryRow+1][1].isnumeric():
-        temp = [fp.split('/')[1]]
-        temp.extend(readlines[summaryRow+1][1:])
-        summarySpec.append(temp)
-    else:
-        temp = [fp.split('/')[1]]
-        temp.extend(np.zeros(5).tolist())
-        summarySpec.append(temp)
-summary_df = pd.DataFrame(data=summarySpec, columns=summaryCols, index=np.arange(1000))
-
-# defect_df와 summary_df merge
-defect_df = pd.merge(summary_df, defect_df, how='inner', left_on='FILE', right_on='FILE')
-
-defect_df.to_csv("./temp_defect_info.csv", index=False)
-print('데이터 추출 완료: temp_klarf_info.csv | temp_defect_info.csv')
+defect_df[["XINDEX", "YINDEX"]] = defect_df[["XINDEX", "YINDEX"]].astype('int')
+defect_df[["XINDEX", "YINDEX"]] += [calib_x,calib_y]
+print('데이터 전처리 완료')
