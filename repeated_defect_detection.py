@@ -263,7 +263,10 @@ class UI(QMainWindow):
 
         defect_df = pd.DataFrame(data=defectList, columns=defectCols)
         defect_df[["XINDEX", "YINDEX"]] = defect_df[["XINDEX", "YINDEX"]].astype('int')
-        defect_df[["XINDEX", "YINDEX"]] += [calib_x,calib_y]
+        nodefect_df = defect_df[defect_df["DEFECTID"] == 0]
+        defect_df = defect_df[defect_df["DEFECTID"] != 0]
+        defect_df[["XINDEX","YINDEX"]] += [calib_x,calib_y]
+        defect_df = pd.concat([nodefect_df,defect_df]).sort_index()
         
         # defect_df에 defects 정보 추가
         defect_df["map"] = defect_df[["XINDEX", "YINDEX"]].apply(list, axis=1)
