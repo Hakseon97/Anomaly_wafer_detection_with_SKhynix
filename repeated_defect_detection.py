@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import Normalizer
 from scipy import interpolate
 import matplotlib.pyplot as plt
 import glob, os
@@ -21,6 +22,9 @@ from datetime import datetime
 import time
 import re
 import joblib
+
+import warnings
+warnings.filterwarnings('ignore')
 
 ## User Interface
 class UI(QMainWindow):
@@ -387,8 +391,12 @@ class UI(QMainWindow):
             df = pd.DataFrame(arr, columns=cols, index=idx)
             return df
 
-        test_df = make_amplitude_df(amp_df)
+        test_df = make_amplitude_df(amp_df).iloc[:,1:]
         base_df["case"] = temp_df.case
+        
+        # 정규화
+        norm = Normalizer(norm='max')
+        test_df = pd.DataFrame(norm.fit_transform(test_df), index=test_df.index)
         
         ## 3. 미리 학습된 모델로 해당 KLARF파일을 검증하여 연속적인 Defects이 나왔는지 검출.
         model = joblib.load(model_path)
