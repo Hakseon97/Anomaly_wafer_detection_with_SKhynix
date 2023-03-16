@@ -106,6 +106,8 @@ class UI(QMainWindow):
                     line = f.readline()
                     if not line:
                         break
+                    if line[0] == ' ':
+                        line = line.strip(' ')
                     line = str(i) + ' ' + line
                     readlines.append(line.strip('\n').strip(';').split(' '))
                     i += 1    
@@ -119,7 +121,7 @@ class UI(QMainWindow):
             for line in readfile(file):
                 if not line[1].lstrip('-').isnumeric():
                     dict_klarf[line[1]] = ' '.join(line[2:])
-            fname.append(os.path.basename(file).split('.')[0])
+            fname.append(os.path.splitext(os.path.basename(file))[0])
             temp = pd.DataFrame(dict_klarf, index=[i])
             temp_df = pd.concat([temp_df, temp])
 
@@ -132,15 +134,12 @@ class UI(QMainWindow):
         # 컬럼 미리 선정.
         selectCols = [
             "filename",
-            "filetimestamp",
             "inspectionstationid",
+            "resulttimestamp",
             "lotid",
             "deviceid",
             "setupid",
-            "stepid",
-            "tifffilename",
-            "waferid",
-            "slot"
+            "stepid"
             ]
 
         # 미리 선정한 컬럼만 추출
@@ -160,24 +159,20 @@ class UI(QMainWindow):
 
         # temp_df의 FileTimestamp를 datetime형으로 변환
         # 현재 %m-%d-%y %H:%M:%S 형태로 되어있음. 이를 %Y-%m-%d %H:%M:%S
-        temp_df.filetimestamp = temp_df.filetimestamp.apply(lambda x: datetime.strptime(x, "%m-%d-%y %H:%M:%S"))
+        temp_df.resulttimestamp = temp_df.resulttimestamp.apply(lambda x: datetime.strptime(x, "%m-%d-%y %H:%M:%S"))
 
-        # A3D01, A3D02로 요약
-        temp_df.inspectionstationid = temp_df.inspectionstationid.apply(lambda x: x.strip('"').split('" "')[-1])
-
+        temp_df.inspectionstationid = temp_df.inspectionstationid.apply(lambda x: ' '.join(x.strip('"').split('" "')[1:])\
+            if x.strip('"').split('" "')[1] != x.strip('"').split('" "')[2] \
+                else x.strip('"').split('" "')[-1])
         # "LotID", "DeviceID", "StepID", "WaferID" columns에 대해 " " 제거
-        temp_df[["setupid", "lotid", "deviceid", "stepid", "waferid"]] = \
-            temp_df[["setupid", "lotid", "deviceid", "stepid", "waferid"]].applymap(lambda x: x.replace('"',''))
+        temp_df[["setupid", "lotid", "deviceid", "stepid"]] = \
+            temp_df[["setupid", "lotid", "deviceid", "stepid"]].applymap(lambda x: x.replace('"',''))
 
-        # WaferID column과 Slot column이 동일한지 확인.
-        # 동일하면 Slot column 제거
-        # 동일하지 않다면, Fab에 문제가 생긴것..
-        temp_df = eliminate(temp_df, "waferid", "slot")
 
         # SetupID column에서 timestamp가 FileTimestamp와 일치하는지 확인.
         # 완벽히 일치한다면 해당 timestamp만 제거.
         if temp_df[temp_df.setupid.apply(lambda x: datetime.strptime(' '.join(x.split(" ")[1:]).strip(' '), "%m-%d-%y %H:%M:%S"))
-                   != temp_df.filetimestamp].size == 0:
+                   != temp_df.resulttimestamp].size == 0:
             temp_df.setupid = temp_df.setupid.apply(lambda x: x.split(" ")[0])
 
         # 수정된 SetupID column에서 Metrology-Type이 StepID와 일치하는지 확인.
@@ -186,22 +181,15 @@ class UI(QMainWindow):
 
         # StepID의 column 통일
         temp_df.stepid = temp_df.stepid.apply(lambda x: x.upper())
-        
-        # TiffFilename column이 FileName column과 일치하면 제거.
-        temp_df[["filename", "tifffilename"]] = temp_df[["filename", "tifffilename"]].applymap(lambda x: x.split('.')[0])
-        temp_df = eliminate(temp_df, "filename", "tifffilename")
-
-        # WaferID에 LotID 정보 추가
-        temp_df.waferid = temp_df.lotid.apply(lambda x: re.split('\d+', x)[0]+re.split('\D+', x)[1]) + '-' + temp_df.waferid
 
         # columns 이름 변경
         # FileTimestamp -> Timestamp
         # InspectionStationID -> MachineID
-        temp_df.rename(columns={'filetimestamp': 'timestamp',
+        temp_df.rename(columns={'resulttimestamp': 'timestamp',
                                 'inspectionstationid': 'machineid'}, inplace=True)
 
         # columns 순서 변경
-        newcols = ['filename', 'lotid', 'waferid', 'timestamp', 'machineid', 'stepid', 'deviceid']
+        newcols = ['filename', 'lotid', 'timestamp', 'machineid', 'stepid', 'deviceid']
         temp_df = temp_df[newcols]
 
         # timestamp 순으로 정렬
@@ -242,31 +230,34 @@ class UI(QMainWindow):
         # DefectList를 dataframe으로 변환.
         defectList = []
         for file in file_list:
-            readlines = readfile(file)
-            for line in readlines:
+            cnt = 0
+            filename = os.path.splitext(os.path.basename(file))[0]
+            for line in readfile(file):
                 if line[1] == 'DefectList':
                     defectRow = int(line[0])
+                    cnt += 1
+                    
+                elif cnt > 0 and line[1].isnumeric():
+                    tempList = [filename]
+                    tempList.append(line[1])
+                    tempList.extend(line[4:6])
+                    defectList.append(tempList)
+                    
                 elif line[1] == 'SummarySpec':
-                    defectRowEND = int(line[0]) - 1
+                    break
+                
                 else:
                     continue
+        
+            if not readfile(file)[defectRow][1].isnumeric():
+                tempList = [filename]
+                tempList.extend(np.zeros(3).tolist())
+                defectList.append(tempList)
                 
-            defectCols = ['FILE']
-            defectCols.extend(readlines[defectRow-2][3:])
-            
-            if readlines[defectRow][1].isnumeric():
-                for line in readlines[defectRow:defectRowEND]:
-                    if len(line) == 18:
-                        temp = [os.path.basename(file).split('.')[0]]
-                        temp.extend(line[1:])
-                        defectList.append(temp)
-            else:
-                temp = [os.path.basename(file).split('.')[0]]
-                temp.extend(np.zeros(17).tolist())
-                defectList.append(temp)
-
-        defect_df = pd.DataFrame(data=defectList, columns=defectCols)
-        defect_df[["XINDEX", "YINDEX"]] = defect_df[["XINDEX", "YINDEX"]].astype('int')
+        defectCols = ['FILE', 'DEFECTID', 'XINDEX', 'YINDEX']
+        defect_df = pd.DataFrame(defectList, columns=defectCols)
+        defect_df[["XINDEX", "YINDEX"]] = defect_df[["XINDEX", "YINDEX"]].applymap(lambda x: 0 if x==None else int(x))
+        
         nodefect_df = defect_df[defect_df["DEFECTID"] == 0]
         defect_df = defect_df[defect_df["DEFECTID"] != 0]
         defect_df[["XINDEX","YINDEX"]] += [calib_x,calib_y]
@@ -274,6 +265,7 @@ class UI(QMainWindow):
         
         # defect_df에 defects 정보 추가
         defect_df["map"] = defect_df[["XINDEX", "YINDEX"]].apply(list, axis=1)
+        
         def appendFn(*listset):
             lst = []
             for list_ in listset:
@@ -284,7 +276,6 @@ class UI(QMainWindow):
         defect_temp.map = defect_temp.map.apply(lambda x: np.array(x).squeeze(0))
 
         base_df = pd.merge(temp_df, defect_temp, how='inner', left_on='filename', right_on='FILE').drop(columns=["FILE", "filename"])
-
         end = time.time()
         test_time = end - start
         print(f"전처리 시간: {int(test_time)}초")
@@ -324,6 +315,7 @@ class UI(QMainWindow):
         df["distance"] = df.map.apply(lambda x:dist(cfg.origin, x))
         df["degree"] = df.map.apply(lambda x:theta(cfg.origin, x))
 
+        
         def batch_graph(degree, distance):
             intp = interpolate.interp1d(degree, distance, kind='linear') # linear, cubic, nearest ...
             xnew = np.arange(min(degree), max(degree), 0.1)
@@ -365,19 +357,17 @@ class UI(QMainWindow):
         device_type = df["deviceid"].unique()
 
         temp_df = pd.DataFrame()
-        case = 0
         for m in machine_type:
             for s in step_type:
                 for d in device_type:
-                    case += 1
                     temp = df[(df.machineid == m) & (df.stepid == s) & (df.deviceid == d)].reset_index()
                     if len(temp) == 0:
                         continue
                     temp = add_amplitude(temp)
-                    temp['case'] = case
                     temp_df = pd.concat([temp_df, temp], axis=0)
-                    
+        
         temp_df = temp_df.sort_values(by='index').reset_index(drop=True)
+        #temp_df = temp_df.set_index('index')
 
         amp_df = temp_df[["amplitude"]]
         amp_df = amp_df[amp_df.amplitude.notnull()]
@@ -392,7 +382,6 @@ class UI(QMainWindow):
             return df
 
         test_df = make_amplitude_df(amp_df).iloc[:,1:]
-        base_df["case"] = temp_df.case
         
         # 정규화
         norm = Normalizer(norm='max')
